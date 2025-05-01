@@ -1,0 +1,77 @@
+//+------------------------------------------------------------------+
+//|                                        CTradeDecisionManager.mqh |
+//|                                Copyright 2024, vitoiacobellis.it |
+//|                                    https://www.vitoiacobellis.it |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2024, vitoiacobellis.it"
+#property link      "https://www.vitoiacobellis.it"
+///+------------------------------------------------------------------+
+//| CTradeDecisionManager.mqh                                        |
+//| Classe di gestione strategie di ingresso per Trendline PRO       |
+//+------------------------------------------------------------------+
+#ifndef __CTRADE_DECISION_MANAGER__
+#define __CTRADE_DECISION_MANAGER__
+
+class CTradeDecisionManager {
+private:
+   double micro_angle;
+   double macro_angle;
+   double extra_angle;
+   double delta_mm, delta_me, delta_em;
+   double distance;
+   int up_count, down_count, support_count;
+
+public:
+   // Identificatore strategia
+   int StrategyID;
+   string StrategyLabel;
+
+   void LoadData(double a_micro, double a_macro, double a_extra,
+                 double d_mm, double d_me, double d_em,
+                 double dist, int up, int down, int support) {
+      micro_angle = a_micro;
+      macro_angle = a_macro;
+      extra_angle = a_extra;
+      delta_mm = d_mm;
+      delta_me = d_me;
+      delta_em = d_em;
+      distance = dist;
+      up_count = up;
+      down_count = down;
+      support_count = support;
+   }
+
+   // Strategia 3001 - TRENDLINE COMPRESSION BREAKOUT
+   bool CheckCompressionBUY(double angle_thresh=15.0, double delta_thresh=10.0, double max_dist=30.0) {
+      if (MathAbs(micro_angle - macro_angle) < delta_thresh &&
+          MathAbs(macro_angle - extra_angle) < delta_thresh &&
+          MathAbs(micro_angle - extra_angle) < delta_thresh &&
+          micro_angle > angle_thresh &&
+          macro_angle > angle_thresh &&
+          extra_angle > angle_thresh &&
+          distance < max_dist) {
+         StrategyID = 3001;
+         StrategyLabel = "TL_COMPRESSION_BREAKOUT_BUY";
+         return true;
+      }
+      return false;
+   }
+
+   bool CheckCompressionSELL(double angle_thresh=15.0, double delta_thresh=10.0, double max_dist=30.0) {
+      if (MathAbs(micro_angle - macro_angle) < delta_thresh &&
+          MathAbs(macro_angle - extra_angle) < delta_thresh &&
+          MathAbs(micro_angle - extra_angle) < delta_thresh &&
+          micro_angle < -angle_thresh &&
+          macro_angle < -angle_thresh &&
+          extra_angle < -angle_thresh &&
+          distance < max_dist) {
+         StrategyID = 3001;
+         StrategyLabel = "TL_COMPRESSION_BREAKOUT_SELL";
+         return true;
+      }
+      return false;
+   }
+};
+
+#endif // __CTRADE_DECISION_MANAGER__
+//+------------------------------------------------------------------+
