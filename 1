@@ -12,13 +12,32 @@
 //+------------------------------------------------------------------+
 //| Trendline PRO v3.3 - Dashboard migliorata con contatori dinamici |
 //+------------------------------------------------------------------+
+
 #include <Trade/Trade.mqh>
 #include <ChartObjects/ChartObjectsLines.mqh>
+#include "..\Include\CTradeDecisionManager.mqh"
+#include "..\Include\CTradeExecutor.mqh"
+#include "..\Include\CVolumeManager.mqh"
 
+input group " === Dashboard input === "
 input int micro_bars = 10;
 input int macro_bars = 50;
 input int extra_bars = 300;
 input int count_window = 20; // Sliding window per contatori
+
+
+// === PARAMETRI DI INPUT MODIFICABILI DA INTERFACCIA ===
+input group "=== PARAMETRI DI INPUT MODIFICABILI DA INTERFACCIA ==="
+input double inp_base_volume = 0.01;
+input double inp_max_volume = 0.1;
+input double inp_initial_capital = 1000.0;
+input int    inp_sl_pips = 30;
+input int    inp_tp_pips = 50;
+input int    inp_trail_pips = 20;
+input int    inp_magic = 123456;
+input string inp_label = "TrendlinePRO";
+input int    inp_strategy = 1; // 1 = TL_COMPRESSION_BREAKOUT
+
 
 //--- Global variables
 datetime last_extra_update = 0;
@@ -27,6 +46,11 @@ string labels_left[6] = {"MICRO", "MACRO", "EXTRA", "UPTrend", "DOWNtrend", "SUP
 string labels_right[6] = {"Δ Mac-Mic", "Δ Mac-Ext", "Δ Ext-Mic", "DIST", "MAXpick", "MINpick"};
 string left_vals[6], right_vals[6];
 
+CTrade trade;
+CTradeDecisionManager decision;
+CTradeExecutor executor;
+CVolumeManager volumeManager;
+
 // Funzioni principali
 double GetSlope(string name);
 int CountUP(int window);
@@ -34,6 +58,16 @@ int CountDOWN(int window);
 int CountSUPPORT(int window);
 
 int OnInit() {
+   // Volume Manager
+volumeManager.Configure(FIXED_LOT, inp_base_volume, inp_max_volume, inp_initial_capital, 0.1, 2.0, 0.01);
+volumeManager.SetDebugMode(true);
+
+// Executor
+executor.Configure(inp_sl_pips, inp_tp_pips, inp_trail_pips, inp_magic, inp_label);
+executor.volume = volumeManager;  // collega il gestore volumi globale
+
+
+   // Etichette dashboard
    for(int i=0; i<6; i++) {
       string lid = "LabelLeft" + IntegerToString(i);
       ObjectCreate(0,lid,OBJ_LABEL,0,0,0);
@@ -71,7 +105,69 @@ void OnTick() {
    }
    CalculateMetrics();
    UpdateLabels();
+   ApplyTrailingStop(inp_trail_pips);
+   
+   // === LOGICA STRATEGICA ===
+double a_micro = GetSlope("Trendline0");
+double a_macro = GetSlope("Trendline1");
+double a_extra = GetSlope("Trendline2");
+double dist = (iClose(_Symbol,_Period,0) - ObjectGetDouble(0,"Trendline2",OBJPROP_PRICE,1)) / _Point;
+double delta_mm = MathAbs(a_macro - a_micro);
+double delta_me = MathAbs(a_macro - a_extra);
+double delta_em = MathAbs(a_extra - a_micro);
+
+int up = CountUP(count_window);
+int down = CountDOWN(count_window);
+int support = CountSUPPORT(count_window);
+
+// Carica dati nella strategia
+decision.LoadData(a_micro, a_macro, a_extra, delta_mm, delta_me, delta_em, dist, up, down, support);
+
+// Verifica condizioni e apre trade
+if (decision.CheckCompressionBUY()) {
+   Print("🔼 Segnale BUY attivo - ", decision.StrategyLabel);
+   executor.OpenBuy();
+} else if (decision.CheckCompressionSELL()) {
+   Print("🔽 Segnale SELL attivo - ", decision.StrategyLabel);
+   executor.OpenSell();
 }
+   
+   
+}
+
+
+
+void ApplyTrailingStop(int trailPips) {
+   if (PositionsTotal() == 0) return;
+
+   for (int i = 0; i < PositionsTotal(); i++) {
+      ulong ticket = PositionGetTicket(i);
+      if (!PositionSelectByTicket(ticket)) continue;
+
+      string symbol = PositionGetString(POSITION_SYMBOL);
+      double price = SymbolInfoDouble(symbol, SYMBOL_BID);
+      double sl = PositionGetDouble(POSITION_SL);
+      double open = PositionGetDouble(POSITION_PRICE_OPEN);
+      long type = PositionGetInteger(POSITION_TYPE);
+
+      double new_sl;
+
+      if (type == POSITION_TYPE_BUY) {
+         new_sl = NormalizeDouble(price - trailPips * _Point, _Digits);
+         if (sl < new_sl) {
+            trade.PositionModify(ticket, new_sl, PositionGetDouble(POSITION_TP));
+         }
+      }
+      else if (type == POSITION_TYPE_SELL) {
+         new_sl = NormalizeDouble(price + trailPips * _Point, _Digits);
+         if (sl > new_sl || sl == 0.0) {
+            trade.PositionModify(ticket, new_sl, PositionGetDouble(POSITION_TP));
+         }
+      }
+   }
+}
+
+
 
 void UpdateTrendline(string name, int bars_back) {
    if(Bars(_Symbol,_Period)<bars_back) return;
