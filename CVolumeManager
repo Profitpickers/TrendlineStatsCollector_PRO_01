@@ -1,0 +1,238 @@
+//+------------------------------------------------------------------+
+//|                                               CVolumeManager.mqh |
+//|                                Copyright 2024, vitoiacobellis.it |
+//|                                    https://www.vitoiacobellis.it |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2024, vitoiacobellis.it"
+#property link      "https://www.vitoiacobellis.it"
+#property version   "1.00"
+
+// Definizione enum per il menu a tendina
+enum ENUM_LOT_STRATEGY
+{
+    FIXED_LOT = 0,            // Lotto Fisso
+    INCREMENT_CAPITAL = 1,    // Incrementale su Capitale
+    INCREMENT_PROFIT = 2,     // Incrementale su Profitto
+    MARTINGALE_CAPITAL = 3,   // Martingala su Capitale
+    MARTINGALE_PROFIT = 4,    // Martingala su Profitto
+    SUM_CAPITAL = 5,         // Somma su Capitale
+    SUM_PROFIT = 6           // Somma su Profitto
+};
+
+class CVolumeManager 
+{
+private:
+    ENUM_LOT_STRATEGY m_strategy;
+    double m_baseVolume;
+    double m_maxVolume;
+    double m_initialCapital;
+    double m_incrementIndex;
+    double m_martingaleMultiplier;
+    double m_sumIncrement;
+    bool m_debugMode;
+    
+    // Variabili per gestione reset volume
+    double m_lastVolumeReset;
+    double m_lastPeakEquity;
+    double m_resetTriggerPercent;
+    bool m_useVolumeReset;
+    bool m_isFirstRun;
+
+public:
+    CVolumeManager(void): 
+        m_strategy(FIXED_LOT),
+        m_baseVolume(0.01),
+        m_maxVolume(0.05),
+        m_initialCapital(0.0),
+        m_incrementIndex(0.0),
+        m_martingaleMultiplier(0.0),
+        m_sumIncrement(0.0),
+        m_debugMode(true),
+        m_lastVolumeReset(0.0),
+        m_lastPeakEquity(0.0),
+        m_resetTriggerPercent(10.0),
+        m_useVolumeReset(true),
+        m_isFirstRun(true) {}
+        
+    void Configure(
+        ENUM_LOT_STRATEGY strategy,
+        double baseVolume,
+        double maxVolume,
+        double initialCapital,
+        double incrementIndex,
+        double martingaleMultiplier,
+        double sumIncrement,
+        bool useVolumeReset = true,
+        double resetTriggerPercent = 10.0
+    )
+    {
+        Print("=== VolumeManager Configuration ===");
+        Print("Strategy Type: ", EnumToString(strategy));
+        Print("Base Volume: ", baseVolume);
+        Print("Max Volume: ", maxVolume);
+        Print("Initial Capital: ", initialCapital);
+        Print("Increment Index: ", incrementIndex);
+        Print("Martingale Multiplier: ", martingaleMultiplier);
+        Print("Sum Increment: ", sumIncrement);
+        Print("Volume Reset Enabled: ", useVolumeReset);
+        Print("Reset Trigger %: ", resetTriggerPercent);
+        Print("================================");
+        
+        m_strategy = strategy;
+        m_baseVolume = baseVolume;
+        m_maxVolume = maxVolume;
+        m_initialCapital = initialCapital;
+        m_incrementIndex = incrementIndex;
+        m_martingaleMultiplier = martingaleMultiplier;
+        m_sumIncrement = sumIncrement;
+        m_useVolumeReset = useVolumeReset;
+        m_resetTriggerPercent = resetTriggerPercent;
+        
+        // Reset delle variabili di gestione volume
+        m_isFirstRun = true;
+        m_lastVolumeReset = 0.0;
+        m_lastPeakEquity = 0.0;
+    }
+    
+    void SetDebugMode(bool debugMode) { m_debugMode = debugMode; }
+    
+    double GetLotSize() {
+    return Calculate(0); // calcola volume con profitto 0
+}
+    
+    double Calculate(double currentProfit);
+    
+private:
+    double CheckVolumeReset(double baseVolume);
+};
+
+
+//+------------------------------------------------------------------+
+//| Verifica e applica reset volume se necessario                      |
+//+------------------------------------------------------------------+
+double CVolumeManager::CheckVolumeReset(double baseVolume)
+{
+    if(!m_useVolumeReset)
+        return baseVolume;
+        
+    double currentEquity = AccountInfoDouble(ACCOUNT_EQUITY);
+    
+    if(m_isFirstRun)
+    {
+        m_lastVolumeReset = currentEquity;
+        m_lastPeakEquity = currentEquity;
+        m_isFirstRun = false;
+        if(m_debugMode)
+            Print("Volume Reset initialized at equity: ", currentEquity);
+        return baseVolume;
+    }
+    
+    // Aggiorna picco equity
+    if(currentEquity > m_lastPeakEquity)
+        m_lastPeakEquity = currentEquity;
+        
+    // Verifica condizioni per reset
+    if(currentEquity > m_lastVolumeReset * (1 + m_resetTriggerPercent/100))
+    {
+        if(m_debugMode)
+        {
+            Print("=== VOLUME RESET TRIGGERED ===");
+            Print("Current Equity: ", currentEquity);
+            Print("Last Reset Level: ", m_lastVolumeReset);
+            Print("Equity Change %: ", ((currentEquity - m_lastVolumeReset)/m_lastVolumeReset) * 100);
+            Print("Old Volume: ", baseVolume);
+            Print("New Volume: ", m_baseVolume);
+        }
+        
+        m_lastVolumeReset = currentEquity;
+        return m_baseVolume;  // Reset al volume base
+    }
+    
+    return baseVolume;
+}
+
+
+//+------------------------------------------------------------------+
+//| Calcola il volume in base alla strategia selezionata              |
+//+------------------------------------------------------------------+
+double CVolumeManager::Calculate(double currentProfit)
+{
+    double volume = m_baseVolume;
+    
+    if(m_debugMode)
+        Print("=== Volume Calculation Start ===");
+    
+    switch(m_strategy)
+    {
+        case FIXED_LOT:
+            if(m_debugMode)
+                Print("Strategy: Fixed Lot");
+            volume = m_baseVolume;
+            break;
+            
+        case INCREMENT_CAPITAL:
+            {
+                double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+                if(equity > m_initialCapital)
+                    volume = m_baseVolume * (1.0 + m_incrementIndex * (equity - m_initialCapital) / m_initialCapital);
+            }
+            break;
+            
+        case INCREMENT_PROFIT:
+            if(currentProfit > 0)
+                volume = m_baseVolume * (1.0 + m_incrementIndex * currentProfit / m_initialCapital);
+            break;
+            
+        case MARTINGALE_CAPITAL:
+            {
+                double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+                if(equity < m_initialCapital)
+                    volume = m_baseVolume * m_martingaleMultiplier;
+            }
+            break;
+            
+        case MARTINGALE_PROFIT:
+            if(currentProfit < 0)
+                volume = m_baseVolume * m_martingaleMultiplier;
+            break;
+            
+        case SUM_CAPITAL:
+            {
+                double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+                if(equity > m_initialCapital)
+                    volume = m_baseVolume + m_sumIncrement * (equity - m_initialCapital) / m_initialCapital;
+            }
+            break;
+            
+        case SUM_PROFIT:
+            if(currentProfit > 0)
+                volume = m_baseVolume + m_sumIncrement * currentProfit / m_initialCapital;
+            break;
+            
+        default:
+            volume = m_baseVolume;
+    }
+    
+    // Applica reset volume se necessario
+    volume = CheckVolumeReset(volume);
+    
+    // Limita il volume massimo
+    volume = MathMin(volume, m_maxVolume);
+    
+    // Arrotonda alla precisione del lotto
+    double minLot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+    double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+    volume = MathRound(volume / lotStep) * lotStep;
+    volume = MathMax(volume, minLot);
+    
+    if(m_debugMode)
+    {
+        Print("=== Final Volume Calculation ===");
+        Print("Strategy: ", EnumToString(m_strategy));
+        Print("Final Volume: ", volume);
+        Print("==============================");
+    }
+    
+    return volume;
+    
+}
