@@ -1,0 +1,62 @@
+//+------------------------------------------------------------------+
+//|                                               CTradeExecutor.mqh |
+//|                                Copyright 2024, vitoiacobellis.it |
+//|                                    https://www.vitoiacobellis.it |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2024, vitoiacobellis.it"
+#property link      "https://www.vitoiacobellis.it"
+//+------------------------------------------------------------------+
+//| CTradeExecutor.mqh - Gestione operazioni di trading              |
+//+------------------------------------------------------------------+
+#ifndef __CTRADE_EXECUTOR__
+#define __CTRADE_EXECUTOR__
+
+#include <Trade/Trade.mqh>
+#include "CVolumeManager.mqh"
+
+class CTradeExecutor {
+private:
+   CTrade trade;
+   CVolumeManager volume;
+
+public:
+   // Parametri operativi
+   double sl_pips;
+   double tp_pips;
+   double trail_pips;
+   int magic;
+   string label;
+
+   CTradeExecutor() {
+      sl_pips = 30;
+      tp_pips = 50;
+      trail_pips = 20;
+      magic = 123456;
+      label = "StrategyTrade";
+   }
+
+   void Configure(double sl, double tp, double trail, int mg, string lbl) {
+      sl_pips = sl;
+      tp_pips = tp;
+      trail_pips = trail;
+      magic = mg;
+      label = lbl;
+   }
+
+   bool OpenBuy() {
+      double lot = volume.GetLotSize();
+      double sl = NormalizeDouble(SymbolInfoDouble(_Symbol, SYMBOL_BID) - sl_pips * _Point, _Digits);
+      double tp = NormalizeDouble(SymbolInfoDouble(_Symbol, SYMBOL_BID) + tp_pips * _Point, _Digits);
+      return trade.Buy(lot, _Symbol, SymbolInfoDouble(_Symbol, SYMBOL_ASK), sl, tp, label);
+   }
+
+   bool OpenSell() {
+      double lot = volume.GetLotSize();
+      double sl = NormalizeDouble(SymbolInfoDouble(_Symbol, SYMBOL_ASK) + sl_pips * _Point, _Digits);
+      double tp = NormalizeDouble(SymbolInfoDouble(_Symbol, SYMBOL_ASK) - tp_pips * _Point, _Digits);
+      return trade.Sell(lot, _Symbol, SymbolInfoDouble(_Symbol, SYMBOL_BID), sl, tp, label);
+   }
+};
+
+#endif // __CTRADE_EXECUTOR__
+//+------------------------------------------------------------------+
