@@ -1,0 +1,174 @@
+//+------------------------------------------------------------------+
+//|                          TrendlineStatsCollector_PRO_01.mq5      |
+//|           Copyright 2025, ProfitPickers - vitoiacobellis.it      |
+//|                               https://www.vitoiacobellis.it      |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2025, ProfitPickers - vitoiacobellis.it"
+#property link      "https://www.vitoiacobellis.it"
+#property version   "1.03"
+#property strict
+#property description "EA di analisi trendline macro-micro, delta e dashboard statistica."
+
+//+------------------------------------------------------------------+
+//| Trendline PRO v3.3 - Dashboard migliorata con contatori dinamici |
+//+------------------------------------------------------------------+
+#include <Trade/Trade.mqh>
+#include <ChartObjects/ChartObjectsLines.mqh>
+
+input int micro_bars = 10;
+input int macro_bars = 50;
+input int extra_bars = 300;
+input int count_window = 20; // Sliding window per contatori
+
+//--- Global variables
+datetime last_extra_update = 0;
+int extra_interval_sec = 300;
+string labels_left[6] = {"MICRO", "MACRO", "EXTRA", "UPTrend", "DOWNtrend", "SUPPORT"};
+string labels_right[6] = {"Δ Mac-Mic", "Δ Mac-Ext", "Δ Ext-Mic", "DIST", "MAXpick", "MINpick"};
+string left_vals[6], right_vals[6];
+
+// Funzioni principali
+double GetSlope(string name);
+int CountUP(int window);
+int CountDOWN(int window);
+int CountSUPPORT(int window);
+
+int OnInit() {
+   for(int i=0; i<6; i++) {
+      string lid = "LabelLeft" + IntegerToString(i);
+      ObjectCreate(0,lid,OBJ_LABEL,0,0,0);
+      ObjectSetInteger(0,lid,OBJPROP_CORNER,CORNER_LEFT_UPPER);
+      ObjectSetInteger(0,lid,OBJPROP_XDISTANCE,10);
+      ObjectSetInteger(0,lid,OBJPROP_YDISTANCE,20+i*15);
+      ObjectSetInteger(0,lid,OBJPROP_COLOR,clrYellow);
+      ObjectSetInteger(0,lid,OBJPROP_FONTSIZE,10);
+
+      string rid = "LabelRight" + IntegerToString(i);
+      ObjectCreate(0,rid,OBJ_LABEL,0,0,0);
+      ObjectSetInteger(0,rid,OBJPROP_CORNER,CORNER_LEFT_UPPER);
+      ObjectSetInteger(0,rid,OBJPROP_XDISTANCE,240);
+      ObjectSetInteger(0,rid,OBJPROP_YDISTANCE,20+i*15);
+      ObjectSetInteger(0,rid,OBJPROP_COLOR,clrYellow);
+      ObjectSetInteger(0,rid,OBJPROP_FONTSIZE,10);
+   }
+   return INIT_SUCCEEDED;
+}
+
+void OnDeinit(const int reason) {
+   for(int i=0;i<6;i++) {
+      ObjectDelete(0,"LabelLeft"+IntegerToString(i));
+      ObjectDelete(0,"LabelRight"+IntegerToString(i));
+   }
+   for(int i=0;i<3;i++) ObjectDelete(0,"Trendline"+IntegerToString(i));
+}
+
+void OnTick() {
+   UpdateTrendline("Trendline0", micro_bars);
+   UpdateTrendline("Trendline1", macro_bars);
+   if(TimeCurrent()-last_extra_update>=extra_interval_sec) {
+      UpdateTrendline("Trendline2", extra_bars);
+      last_extra_update = TimeCurrent();
+   }
+   CalculateMetrics();
+   UpdateLabels();
+}
+
+void UpdateTrendline(string name, int bars_back) {
+   if(Bars(_Symbol,_Period)<bars_back) return;
+   datetime t1 = iTime(_Symbol,_Period,bars_back);
+   double p1 = iClose(_Symbol,_Period,bars_back);
+   datetime t2 = iTime(_Symbol,_Period,0);
+   double p2 = iClose(_Symbol,_Period,0);
+
+   if(ObjectFind(0,name)<0)
+      ObjectCreate(0,name,OBJ_TREND,0,t1,p1,t2,p2);
+   else {
+      ObjectMove(0,name,0,t1,p1);
+      ObjectMove(0,name,1,t2,p2);
+   }
+   double angle = GetSlope(name);
+   ObjectSetInteger(0,name,OBJPROP_COLOR,(angle>=0)?clrLime:clrRed);
+   ObjectSetInteger(0,name,OBJPROP_WIDTH,StringToInteger(StringSubstr(name,-1))+1);
+}
+
+double GetSlope(string obj) {
+   long t1_raw, t2_raw;
+   if(!ObjectGetInteger(0, obj, OBJPROP_TIME, 0, t1_raw) ||
+      !ObjectGetInteger(0, obj, OBJPROP_TIME, 1, t2_raw))
+      return 0.0;
+
+   datetime t1 = (datetime)t1_raw;
+   datetime t2 = (datetime)t2_raw;
+   double p1 = ObjectGetDouble(0, obj, OBJPROP_PRICE, 0);
+   double p2 = ObjectGetDouble(0, obj, OBJPROP_PRICE, 1);
+   double dx = (double)(t2 - t1) / 60.0;
+   double dy = (p2 - p1) / _Point;
+   double factor = 2.0;
+
+   if(dx == 0.0) return 0.0;
+   return MathArctan((dy / dx) * factor) * 180.0 / M_PI;
+}
+
+void CalculateMetrics() {
+   double a0 = GetSlope("Trendline0");
+   double a1 = GetSlope("Trendline1");
+   double a2 = GetSlope("Trendline2");
+   double dist = (iClose(_Symbol,_Period,0)-ObjectGetDouble(0,"Trendline2",OBJPROP_PRICE,1))/_Point;
+
+   left_vals[0]=StringFormat("%.2f",a0);
+   left_vals[1]=StringFormat("%.2f",a1);
+   left_vals[2]=StringFormat("%.2f",a2);
+   left_vals[3]=IntegerToString(CountUP(count_window));
+   left_vals[4]=IntegerToString(CountDOWN(count_window));
+   left_vals[5]=IntegerToString(CountSUPPORT(count_window));
+
+   right_vals[0]=StringFormat("%.2f",MathAbs(a0-a1));
+   right_vals[1]=StringFormat("%.2f",MathAbs(a1-a2));
+   right_vals[2]=StringFormat("%.2f",MathAbs(a2-a0));
+   right_vals[3]=StringFormat("%.1f",dist);
+   right_vals[4]=(a0 > a1 && a1 > a2)?"↑":(a0 < a1 && a1 < a2)?"↓":"➔";
+   right_vals[5]=right_vals[4];
+}
+
+void UpdateLabels() {
+   for(int i=0;i<6;i++) {
+      string lid = "LabelLeft"+IntegerToString(i);
+      string rid = "LabelRight"+IntegerToString(i);
+      ObjectSetString(0,lid,OBJPROP_TEXT,labels_left[i]+": "+left_vals[i]);
+      ObjectSetString(0,rid,OBJPROP_TEXT,labels_right[i]+": "+right_vals[i]);
+   }
+}
+
+// Contatori sliding window
+int CountUP(int window) {
+   int count = 0;
+   for(int i=1; i<=window; i++) {
+      double ma = (i < Bars(_Symbol,_Period)) ? GetSlope("Trendline1") : 0;
+      double mi = (i < Bars(_Symbol,_Period)) ? GetSlope("Trendline0") : 0;
+      if(mi > ma) count++;
+   }
+   return count;
+}
+
+int CountDOWN(int window) {
+   int count = 0;
+   for(int i=1; i<=window; i++) {
+      double ma = (i < Bars(_Symbol,_Period)) ? GetSlope("Trendline1") : 0;
+      double mi = (i < Bars(_Symbol,_Period)) ? GetSlope("Trendline0") : 0;
+      if(mi < ma) count++;
+   }
+   return count;
+}
+
+int CountSUPPORT(int window) {
+   int count = 0;
+   for(int i=1; i<=window; i++) {
+      double a0 = GetSlope("Trendline0");
+      double a1 = GetSlope("Trendline1");
+      double a2 = GetSlope("Trendline2");
+      if((a0 > 0 && a1 > 0 && a2 > 0) || (a0 < 0 && a1 < 0 && a2 < 0))
+         count++;
+   }
+   return count;
+}
+//+------------------------------------------------------------------+
