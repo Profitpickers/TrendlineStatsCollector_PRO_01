@@ -17,7 +17,7 @@
 class CTradeExecutor {
 private:
    CTrade trade;
-   CVolumeManager volume;
+   
 
 public:
    // Parametri operativi
@@ -27,6 +27,8 @@ public:
    int magic;
    string label;
 
+   CVolumeManager volume;
+   
    CTradeExecutor() {
       sl_pips = 30;
       tp_pips = 50;
