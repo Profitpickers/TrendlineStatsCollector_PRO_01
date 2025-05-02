@@ -33,7 +33,19 @@ input double inp_max_volume = 0.1;
 input double inp_initial_capital = 1000.0;
 input int    inp_sl_pips = 30;
 input int    inp_tp_pips = 50;
-input int    inp_trail_pips = 20;
+
+input group " === GESTIONE TRAIL DINAMICO === "
+input double inp_spike_threshold_points = 300;   // spike a favore in punti (es. 300 = 30 pip su XAUUSD)
+input double inp_profit_trigger_points = 200;    // profitto oltre cui chiudere tutto
+input double inp_trail_pips           = 50;   // trailing base in pip
+input double inp_momentum_base        = 30;   // punto di riferimento per normalizzare la forza (candela H6)
+input double inp_momentum_min_factor  = 1.0;  // minimo moltiplicatore (trailing lento)
+input double inp_momentum_max_factor  = 3.0;  // massimo moltiplicatore (trailing veloce)
+
+
+
+
+input group " === GESTIONE STRATEGIE === "
 input int    inp_magic = 123456;
 input string inp_label = "TrendlinePRO";
 input int    inp_strategy = 1; // 1 = TL_COMPRESSION_BREAKOUT
@@ -108,7 +120,7 @@ void OnTick() {
    }
    CalculateMetrics();
    UpdateLabels();
-   ApplyTrailingStop(inp_trail_pips);
+   ApplyTrailingStop((int)inp_trail_pips);
    
   // === BLOCCO STRATEGICO SICURO ===
 if (PositionSelect(_Symbol)) return; // evitiamo ordini multipli
@@ -151,33 +163,52 @@ if (decision.CheckCompressionBUY()) {
 }
 
 
+// Calcola la velocità del corpo candela corrente sul timeframe attivo
+double GetMomentumCurrentTF() {
+   double open = iOpen(_Symbol, _Period, 0);
+   double close = iClose(_Symbol, _Period, 0);
+   return MathAbs(close - open) / _Point;
+}
+
+
+// Normalizza la spinta per ottenere un moltiplicatore del trailing
+double NormalizeMomentum(double momentum) {
+   return MathMin(inp_momentum_max_factor, MathMax(inp_momentum_min_factor, momentum / inp_momentum_base));
+}
+
 
 void ApplyTrailingStop(int trailPips) {
    if (PositionsTotal() == 0) return;
+
+   double momentum = GetMomentumCurrentTF();
+   double factor = NormalizeMomentum(momentum);
+   double adjustedTrail = trailPips / factor;
 
    for (int i = 0; i < PositionsTotal(); i++) {
       ulong ticket = PositionGetTicket(i);
       if (!PositionSelectByTicket(ticket)) continue;
 
       string symbol = PositionGetString(POSITION_SYMBOL);
-      double price = SymbolInfoDouble(symbol, SYMBOL_BID);
+      double price = (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY)
+                     ? SymbolInfoDouble(symbol, SYMBOL_BID)
+                     : SymbolInfoDouble(symbol, SYMBOL_ASK);
       double sl = PositionGetDouble(POSITION_SL);
+      double tp = PositionGetDouble(POSITION_TP);
       double open = PositionGetDouble(POSITION_PRICE_OPEN);
       long type = PositionGetInteger(POSITION_TYPE);
+      int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+      double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
 
       double new_sl;
-
       if (type == POSITION_TYPE_BUY) {
-         new_sl = NormalizeDouble(price - trailPips * _Point, _Digits);
-         if (sl < new_sl) {
-            trade.PositionModify(ticket, new_sl, PositionGetDouble(POSITION_TP));
-         }
+         new_sl = NormalizeDouble(price - adjustedTrail * point, digits);
+         if (sl < new_sl)
+            trade.PositionModify(ticket, new_sl, tp);
       }
       else if (type == POSITION_TYPE_SELL) {
-         new_sl = NormalizeDouble(price + trailPips * _Point, _Digits);
-         if (sl > new_sl || sl == 0.0) {
-            trade.PositionModify(ticket, new_sl, PositionGetDouble(POSITION_TP));
-         }
+         new_sl = NormalizeDouble(price + adjustedTrail * point, digits);
+         if (sl > new_sl || sl == 0.0)
+            trade.PositionModify(ticket, new_sl, tp);
       }
    }
 }
