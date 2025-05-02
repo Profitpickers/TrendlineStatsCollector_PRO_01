@@ -14,21 +14,30 @@
 
 class CTradeDecisionManager {
 private:
-   double micro_angle;
-   double macro_angle;
-   double extra_angle;
+   double micro_angle;  // Angoli delle 3 trendline
+   double macro_angle;  // Angoli delle 3 trendline
+   double extra_angle;  // Angoli delle 3 trendline
    double delta_mm, delta_me, delta_em;
    double distance;
    int up_count, down_count, support_count;
 
 public:
-   // Identificatore strategia
-   int StrategyID;
-   string StrategyLabel;
 
-   void LoadData(double a_micro, double a_macro, double a_extra,
-                 double d_mm, double d_me, double d_em,
-                 double dist, int up, int down, int support) {
+
+// Identificatori della strategia attiva
+int StrategyID;
+string StrategyLabel;
+
+
+   
+
+   void LoadData(double _micro, double _macro, double _extra,
+              double _delta_mm, double _delta_me, double _delta_em,
+              double _distance, int _up, int _down, int _support) {
+   micro_angle = _micro;
+   macro_angle = _macro;
+   extra_angle = _extra;
+      
       micro_angle = a_micro;
       macro_angle = a_macro;
       extra_angle = a_extra;
@@ -72,6 +81,36 @@ public:
       return false;
    }
 };
+
+
+
+// Strategia 3002 - CONTRARIAN TREND ALIGNMENT
+bool CheckContrarianBUY(double delta_thresh = 10.0) {
+   if (micro_angle < -15 && macro_angle < -15 && extra_angle < -15 &&
+       MathAbs(micro_angle - macro_angle) < delta_thresh &&
+       MathAbs(macro_angle - extra_angle) < delta_thresh &&
+       MathAbs(micro_angle - extra_angle) < delta_thresh) {
+      StrategyID = 3002;
+      StrategyLabel = "TL_CONTRARIAN_BUY";
+      return true;
+   }
+   return false;
+}
+
+bool CheckContrarianSELL(double delta_thresh = 10.0) {
+   if (micro_angle > 15 && macro_angle > 15 && extra_angle > 15 &&
+       MathAbs(micro_angle - macro_angle) < delta_thresh &&
+       MathAbs(macro_angle - extra_angle) < delta_thresh &&
+       MathAbs(micro_angle - extra_angle) < delta_thresh) {
+      StrategyID = 3002;
+      StrategyLabel = "TL_CONTRARIAN_SELL";
+      return true;
+   }
+   return false;
+}
+
+
+
 
 #endif // __CTRADE_DECISION_MANAGER__
 //+------------------------------------------------------------------+
