@@ -5,82 +5,62 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2024, vitoiacobellis.it"
 #property link      "https://www.vitoiacobellis.it"
-///+------------------------------------------------------------------+
-//| CTradeDecisionManager.mqh                                        |
-//| Classe di gestione strategie di ingresso per Trendline PRO       |
+//+------------------------------------------------------------------+
+//|           CTradeDecisionManager.mqh                              |
+//|           Gestione strategie di trading modulari                |
 //+------------------------------------------------------------------+
 #ifndef __CTRADE_DECISION_MANAGER__
 #define __CTRADE_DECISION_MANAGER__
 
 class CTradeDecisionManager {
-private:
-   double micro_angle;  // Angoli delle 3 trendline
-   double macro_angle;  // Angoli delle 3 trendline
-   double extra_angle;  // Angoli delle 3 trendline
-   double delta_mm, delta_me, delta_em;
-   double distance;
-   int up_count, down_count, support_count;
-
 public:
+   // === Trendline Angles
+   double micro_angle;
+   double macro_angle;
+   double extra_angle;
 
+   // === Distanze angolari
+   double delta_mm;
+   double delta_me;
+   double delta_em;
 
+   // === Distanza da prezzo
+   double dist;
 
-/ === Trendline Angles
-double micro_angle;
-double macro_angle;
-double extra_angle;
+   // === Contatori
+   int up_count;
+   int down_count;
+   int support_count;
 
-// === Distanze angolari
-double delta_mm;
-double delta_me;
-double delta_em;
+   // === Identificatori strategia attiva
+   int StrategyID;
+   string StrategyLabel;
 
-// === Distanza da prezzo
-double dist;
-
-// === Contatori
-int up_count;
-int down_count;
-int support_count;
-
-// === Identificatori strategia attiva
-int StrategyID;
-string StrategyLabel;
-
-// Identificatori della strategia attiva
-int StrategyID;
-string StrategyLabel;
-
-
-   
-
+   // === Caricamento dati
    void LoadData(double a_micro, double a_macro, double a_extra,
-              double d_mm, double d_me, double d_em,
-              double _dist, int up, int down, int support)
-{
-   micro_angle = a_micro;
-   macro_angle = a_macro;
-   extra_angle = a_extra;
+                 double d_mm, double d_me, double d_em,
+                 double _dist, int up, int down, int support)
+   {
+      micro_angle = a_micro;
+      macro_angle = a_macro;
+      extra_angle = a_extra;
 
-   delta_mm = d_mm;
-   delta_me = d_me;
-   delta_em = d_em;
+      delta_mm = d_mm;
+      delta_me = d_me;
+      delta_em = d_em;
 
-   dist = _dist;
-   up_count = up;
-   down_count = down;
-   support_count = support;
-}
+      dist = _dist;
+      up_count = up;
+      down_count = down;
+      support_count = support;
+   }
 
-   // Strategia 3001 - TRENDLINE COMPRESSION BREAKOUT
-   bool CheckCompressionBUY(double angle_thresh=15.0, double delta_thresh=10.0, double max_dist=30.0) {
-      if (MathAbs(micro_angle - macro_angle) < delta_thresh &&
-          MathAbs(macro_angle - extra_angle) < delta_thresh &&
-          MathAbs(micro_angle - extra_angle) < delta_thresh &&
-          micro_angle > angle_thresh &&
-          macro_angle > angle_thresh &&
-          extra_angle > angle_thresh &&
-          distance < max_dist) {
+   // === STRATEGIA 1: COMPRESSIONE (Breakout)
+   bool CheckCompressionBUY(double angle_thresh = 15.0, double delta_thresh = 10.0, double max_dist = 30.0) {
+      if (micro_angle > angle_thresh && macro_angle > angle_thresh && extra_angle > angle_thresh &&
+          delta_mm < delta_thresh && delta_me < delta_thresh && delta_em < delta_thresh &&
+          dist < max_dist)
+      {
          StrategyID = 3001;
          StrategyLabel = "TL_COMPRESSION_BREAKOUT_BUY";
          return true;
@@ -88,51 +68,44 @@ string StrategyLabel;
       return false;
    }
 
-   bool CheckCompressionSELL(double angle_thresh=15.0, double delta_thresh=10.0, double max_dist=30.0) {
-      if (MathAbs(micro_angle - macro_angle) < delta_thresh &&
-          MathAbs(macro_angle - extra_angle) < delta_thresh &&
-          MathAbs(micro_angle - extra_angle) < delta_thresh &&
-          micro_angle < -angle_thresh &&
-          macro_angle < -angle_thresh &&
-          extra_angle < -angle_thresh &&
-          distance < max_dist) {
+   bool CheckCompressionSELL(double angle_thresh = 15.0, double delta_thresh = 10.0, double max_dist = 30.0) {
+      if (micro_angle < -angle_thresh && macro_angle < -angle_thresh && extra_angle < -angle_thresh &&
+          delta_mm < delta_thresh && delta_me < delta_thresh && delta_em < delta_thresh &&
+          dist < max_dist)
+      {
          StrategyID = 3001;
          StrategyLabel = "TL_COMPRESSION_BREAKOUT_SELL";
          return true;
       }
       return false;
    }
+
+   // === STRATEGIA 2: CONTRARIAN
+   bool CheckContrarianBUY(double delta_thresh = 10.0) {
+      if (micro_angle < -15 && macro_angle < -15 && extra_angle < -15 &&
+          MathAbs(micro_angle - macro_angle) < delta_thresh &&
+          MathAbs(macro_angle - extra_angle) < delta_thresh &&
+          MathAbs(micro_angle - extra_angle) < delta_thresh)
+      {
+         StrategyID = 3002;
+         StrategyLabel = "TL_CONTRARIAN_BUY";
+         return true;
+      }
+      return false;
+   }
+
+   bool CheckContrarianSELL(double delta_thresh = 10.0) {
+      if (micro_angle > 15 && macro_angle > 15 && extra_angle > 15 &&
+          MathAbs(micro_angle - macro_angle) < delta_thresh &&
+          MathAbs(macro_angle - extra_angle) < delta_thresh &&
+          MathAbs(micro_angle - extra_angle) < delta_thresh)
+      {
+         StrategyID = 3002;
+         StrategyLabel = "TL_CONTRARIAN_SELL";
+         return true;
+      }
+      return false;
+   }
 };
 
-
-
-// Strategia 3002 - CONTRARIAN TREND ALIGNMENT
-bool CheckContrarianBUY(double delta_thresh = 10.0) {
-   if (micro_angle < -15 && macro_angle < -15 && extra_angle < -15 &&
-       MathAbs(micro_angle - macro_angle) < delta_thresh &&
-       MathAbs(macro_angle - extra_angle) < delta_thresh &&
-       MathAbs(micro_angle - extra_angle) < delta_thresh) {
-      StrategyID = 3002;
-      StrategyLabel = "TL_CONTRARIAN_BUY";
-      return true;
-   }
-   return false;
-}
-
-bool CheckContrarianSELL(double delta_thresh = 10.0) {
-   if (micro_angle > 15 && macro_angle > 15 && extra_angle > 15 &&
-       MathAbs(micro_angle - macro_angle) < delta_thresh &&
-       MathAbs(macro_angle - extra_angle) < delta_thresh &&
-       MathAbs(micro_angle - extra_angle) < delta_thresh) {
-      StrategyID = 3002;
-      StrategyLabel = "TL_CONTRARIAN_SELL";
-      return true;
-   }
-   return false;
-}
-
-
-
-
 #endif // __CTRADE_DECISION_MANAGER__
-//+------------------------------------------------------------------+
