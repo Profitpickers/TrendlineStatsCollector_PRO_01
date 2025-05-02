@@ -24,6 +24,29 @@ private:
 public:
 
 
+
+/ === Trendline Angles
+double micro_angle;
+double macro_angle;
+double extra_angle;
+
+// === Distanze angolari
+double delta_mm;
+double delta_me;
+double delta_em;
+
+// === Distanza da prezzo
+double dist;
+
+// === Contatori
+int up_count;
+int down_count;
+int support_count;
+
+// === Identificatori strategia attiva
+int StrategyID;
+string StrategyLabel;
+
 // Identificatori della strategia attiva
 int StrategyID;
 string StrategyLabel;
@@ -31,24 +54,23 @@ string StrategyLabel;
 
    
 
-   void LoadData(double _micro, double _macro, double _extra,
-              double _delta_mm, double _delta_me, double _delta_em,
-              double _distance, int _up, int _down, int _support) {
-   micro_angle = _micro;
-   macro_angle = _macro;
-   extra_angle = _extra;
-      
-      micro_angle = a_micro;
-      macro_angle = a_macro;
-      extra_angle = a_extra;
-      delta_mm = d_mm;
-      delta_me = d_me;
-      delta_em = d_em;
-      distance = dist;
-      up_count = up;
-      down_count = down;
-      support_count = support;
-   }
+   void LoadData(double a_micro, double a_macro, double a_extra,
+              double d_mm, double d_me, double d_em,
+              double _dist, int up, int down, int support)
+{
+   micro_angle = a_micro;
+   macro_angle = a_macro;
+   extra_angle = a_extra;
+
+   delta_mm = d_mm;
+   delta_me = d_me;
+   delta_em = d_em;
+
+   dist = _dist;
+   up_count = up;
+   down_count = down;
+   support_count = support;
+}
 
    // Strategia 3001 - TRENDLINE COMPRESSION BREAKOUT
    bool CheckCompressionBUY(double angle_thresh=15.0, double delta_thresh=10.0, double max_dist=30.0) {
