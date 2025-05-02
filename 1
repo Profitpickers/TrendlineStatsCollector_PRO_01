@@ -56,6 +56,9 @@ double GetSlope(string name);
 int CountUP(int window);
 int CountDOWN(int window);
 int CountSUPPORT(int window);
+bool tradeInProgress = false;
+
+
 
 int OnInit() {
    // Volume Manager
@@ -107,7 +110,9 @@ void OnTick() {
    UpdateLabels();
    ApplyTrailingStop(inp_trail_pips);
    
-   // === LOGICA STRATEGICA ===
+  // === BLOCCO STRATEGICO SICURO ===
+if (PositionSelect(_Symbol)) return; // evitiamo ordini multipli
+
 double a_micro = GetSlope("Trendline0");
 double a_macro = GetSlope("Trendline1");
 double a_extra = GetSlope("Trendline2");
@@ -122,6 +127,16 @@ int support = CountSUPPORT(count_window);
 
 // Carica dati nella strategia
 decision.LoadData(a_micro, a_macro, a_extra, delta_mm, delta_me, delta_em, dist, up, down, support);
+
+/*
+if (decision.CheckCompressionBUY()) {
+   Print("🔼 Segnale BUY invertito → eseguo SELL - ", decision.StrategyLabel);
+   executor.OpenSell();
+} else if (decision.CheckCompressionSELL()) {
+   Print("🔽 Segnale SELL invertito → eseguo BUY - ", decision.StrategyLabel);
+   executor.OpenBuy();
+}
+*/
 
 // Verifica condizioni e apre trade
 if (decision.CheckCompressionBUY()) {
